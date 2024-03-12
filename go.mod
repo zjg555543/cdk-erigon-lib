@@ -1,4 +1,4 @@
-module github.com/ledgerwatch/erigon-lib
+module github.com/gateway-fm/cdk-erigon-lib
 
 go 1.19
 
