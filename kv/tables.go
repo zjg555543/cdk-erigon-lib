@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/gateway-fm/cdk-erigon-lib/gointerfaces/types"
+	"fmt"
 )
 
 // DBSchemaVersion versions list
@@ -699,6 +700,7 @@ func sortBuckets() {
 }
 
 func init() {
+	fmt.Println("[cdk-erigon-lib] timestamp 2024-03-12:16:34")
 	reinit()
 }
 
