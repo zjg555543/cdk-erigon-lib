@@ -26,6 +26,7 @@ import (
 	"github.com/ledgerwatch/log/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"sync"
 )
 
 func BaseCase(t *testing.T) (kv.RwDB, kv.RwTx, kv.RwCursorDupSort) {
@@ -772,4 +773,42 @@ func TestAutoConversionSeekBothRange(t *testing.T) {
 	v, err = c.SeekBothRange([]byte("X..........................."), []byte("_______________________________Y"))
 	require.NoError(t, err)
 	assert.Nil(t, v)
+}
+
+func TestDeadlock(t *testing.T) {
+	path := t.TempDir()
+	logger := log.New()
+	table := "Table"
+	db := NewMDBX(logger).InMem(path).WithTableCfg(func(defaultBuckets kv.TableCfg) kv.TableCfg {
+		return kv.TableCfg{
+			table:       kv.TableCfgItem{Flags: kv.DupSort},
+			kv.Sequence: kv.TableCfgItem{},
+		}
+	}).MapSize(128 * datasize.MB).MustOpen()
+	t.Cleanup(db.Close)
+
+	wg := sync.WaitGroup{}
+	for i := 0; i < 300_000; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			ctx := context.Background()
+			// create a write transaction every X requests
+			if idx%5 == 0 {
+				tx, err := db.BeginRw(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer tx.Rollback()
+			} else {
+				tx, err := db.BeginRo(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer tx.Rollback()
+			}
+			wg.Done()
+		}(i)
+	}
+
+	wg.Wait()
 }

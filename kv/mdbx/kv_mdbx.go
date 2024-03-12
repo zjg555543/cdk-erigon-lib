@@ -54,7 +54,8 @@ type MdbxOpts struct {
 	// must be in the range from 12.5% (almost empty) to 50% (half empty)
 	// which corresponds to the range from 8192 and to 32768 in units respectively
 	log             log.Logger
-	roTxsLimiter    *semaphore.Weighted
+	readTxLimiter   *semaphore.Weighted
+	writeTxLimiter  *semaphore.Weighted
 	bucketsCfg      TableCfgFunc
 	path            string
 	syncPeriod      time.Duration
@@ -104,7 +105,7 @@ func (opts MdbxOpts) DirtySpace(s uint64) MdbxOpts {
 }
 
 func (opts MdbxOpts) RoTxsLimiter(l *semaphore.Weighted) MdbxOpts {
-	opts.roTxsLimiter = l
+	opts.readTxLimiter = l
 	return opts
 }
 
@@ -326,18 +327,25 @@ func (opts MdbxOpts) Open() (kv.RwDB, error) {
 	//	return nil, err
 	//}
 
-	if opts.roTxsLimiter == nil {
+	if opts.readTxLimiter == nil {
 		targetSemCount := int64(runtime.GOMAXPROCS(-1) * 16)
-		opts.roTxsLimiter = semaphore.NewWeighted(targetSemCount) // 1 less than max to allow unlocking to happen
+		opts.readTxLimiter = semaphore.NewWeighted(targetSemCount) // 1 less than max to allow unlocking to happen
 	}
+
+	if opts.writeTxLimiter == nil {
+		targetSemCount := int64(runtime.GOMAXPROCS(-1)) - 1
+		opts.writeTxLimiter = semaphore.NewWeighted(targetSemCount) // 1 less than max to allow unlocking to happen
+	}
+
 	db := &MdbxKV{
-		opts:         opts,
-		env:          env,
-		log:          opts.log,
-		wg:           &sync.WaitGroup{},
-		buckets:      kv.TableCfg{},
-		txSize:       dirtyPagesLimit * opts.pageSize,
-		roTxsLimiter: opts.roTxsLimiter,
+		opts:           opts,
+		env:            env,
+		log:            opts.log,
+		wg:             &sync.WaitGroup{},
+		buckets:        kv.TableCfg{},
+		txSize:         dirtyPagesLimit * opts.pageSize,
+		readTxLimiter:  opts.readTxLimiter,
+		writeTxLimiter: opts.writeTxLimiter,
 	}
 
 	customBuckets := opts.bucketsCfg(kv.ChaindataTablesCfg)
@@ -398,15 +406,16 @@ func (opts MdbxOpts) MustOpen() kv.RwDB {
 }
 
 type MdbxKV struct {
-	log          log.Logger
-	env          *mdbx.Env
-	wg           *sync.WaitGroup
-	buckets      kv.TableCfg
-	roTxsLimiter *semaphore.Weighted // does limit amount of concurrent Ro transactions - in most casess runtime.NumCPU() is good value for this channel capacity - this channel can be shared with other components (like Decompressor)
-	opts         MdbxOpts
-	txSize       uint64
-	closed       atomic.Bool
-	path         string
+	log            log.Logger
+	env            *mdbx.Env
+	wg             *sync.WaitGroup
+	buckets        kv.TableCfg
+	readTxLimiter  *semaphore.Weighted // does limit amount of concurrent Ro transactions - in most casess runtime.NumCPU() is good value for this channel capacity - this channel can be shared with other components (like Decompressor)
+	writeTxLimiter *semaphore.Weighted
+	opts           MdbxOpts
+	txSize         uint64
+	closed         atomic.Bool
+	path           string
 }
 
 func (db *MdbxKV) PageSize() uint64 { return db.opts.pageSize }
@@ -480,7 +489,7 @@ func (db *MdbxKV) BeginRo(ctx context.Context) (txn kv.Tx, err error) {
 	}
 
 	// will return nil err if context is cancelled (may appear to acquire the semaphore)
-	if semErr := db.roTxsLimiter.Acquire(ctx, 1); semErr != nil {
+	if semErr := db.readTxLimiter.Acquire(ctx, 1); semErr != nil {
 		return nil, semErr
 	}
 
@@ -491,7 +500,7 @@ func (db *MdbxKV) BeginRo(ctx context.Context) (txn kv.Tx, err error) {
 		if txn == nil {
 			// on error, or if there is whatever reason that we don't return a tx,
 			// we need to free up the limiter slot, otherwise it could lead to deadlocks
-			db.roTxsLimiter.Release(1)
+			db.readTxLimiter.Release(1)
 		}
 	}()
 
@@ -515,19 +524,31 @@ func (db *MdbxKV) BeginRwNosync(ctx context.Context) (kv.RwTx, error) {
 }
 
 func (db *MdbxKV) beginRw(ctx context.Context, flags uint) (txn kv.RwTx, err error) {
+	if db.closed.Load() {
+		return nil, fmt.Errorf("db closed")
+	}
+
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	default:
 	}
 
-	if db.closed.Load() {
-		return nil, fmt.Errorf("db closed")
+	// will return nil err if context is cancelled (may appear to acquire the semaphore)
+	if semErr := db.writeTxLimiter.Acquire(ctx, 1); semErr != nil {
+		return nil, semErr
 	}
+
 	runtime.LockOSThread()
 	defer func() {
 		if err == nil {
 			db.wg.Add(1)
+		}
+		if txn == nil {
+			// on error, or if there is whatever reason that we don't return a tx,
+			// we need to free up the limiter slot, otherwise it could lead to deadlocks
+			db.writeTxLimiter.Release(1)
+			runtime.UnlockOSThread()
 		}
 	}()
 
@@ -778,8 +799,9 @@ func (tx *MdbxTx) Commit() error {
 		tx.tx = nil
 		tx.db.wg.Done()
 		if tx.readOnly {
-			tx.db.roTxsLimiter.Release(1)
+			tx.db.readTxLimiter.Release(1)
 		} else {
+			tx.db.writeTxLimiter.Release(1)
 			runtime.UnlockOSThread()
 		}
 	}()
@@ -828,8 +850,9 @@ func (tx *MdbxTx) Rollback() {
 		tx.tx = nil
 		tx.db.wg.Done()
 		if tx.readOnly {
-			tx.db.roTxsLimiter.Release(1)
+			tx.db.readTxLimiter.Release(1)
 		} else {
+			tx.db.writeTxLimiter.Release(1)
 			runtime.UnlockOSThread()
 		}
 	}()
