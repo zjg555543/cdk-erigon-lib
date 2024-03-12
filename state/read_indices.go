@@ -23,8 +23,8 @@ import (
 	"time"
 
 	"github.com/RoaringBitmap/roaring/roaring64"
-	"github.com/ledgerwatch/erigon-lib/common/background"
-	"github.com/ledgerwatch/erigon-lib/kv"
+	"github.com/gateway-fm/cdk-erigon-lib/common/background"
+	"github.com/gateway-fm/cdk-erigon-lib/kv"
 )
 
 type ReadIndices struct {

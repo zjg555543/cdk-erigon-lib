@@ -22,7 +22,7 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/gateway-fm/cdk-erigon-lib/common"
 )
 
 // Config is the core config which determines the blockchain settings.

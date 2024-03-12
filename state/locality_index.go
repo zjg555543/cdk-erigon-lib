@@ -28,10 +28,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ledgerwatch/erigon-lib/common/assert"
-	"github.com/ledgerwatch/erigon-lib/common/dir"
-	"github.com/ledgerwatch/erigon-lib/kv/bitmapdb"
-	"github.com/ledgerwatch/erigon-lib/recsplit"
+	"github.com/gateway-fm/cdk-erigon-lib/common/assert"
+	"github.com/gateway-fm/cdk-erigon-lib/common/dir"
+	"github.com/gateway-fm/cdk-erigon-lib/kv/bitmapdb"
+	"github.com/gateway-fm/cdk-erigon-lib/recsplit"
 	"github.com/ledgerwatch/log/v3"
 )
 

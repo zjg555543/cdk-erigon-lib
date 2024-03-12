@@ -28,9 +28,9 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/ledgerwatch/erigon-lib/mmap"
-	"github.com/ledgerwatch/erigon-lib/recsplit/eliasfano16"
-	"github.com/ledgerwatch/erigon-lib/recsplit/eliasfano32"
+	"github.com/gateway-fm/cdk-erigon-lib/mmap"
+	"github.com/gateway-fm/cdk-erigon-lib/recsplit/eliasfano16"
+	"github.com/gateway-fm/cdk-erigon-lib/recsplit/eliasfano32"
 	"github.com/ledgerwatch/log/v3"
 )
 

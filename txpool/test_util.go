@@ -20,9 +20,9 @@ import (
 	"context"
 	"sync"
 
-	"github.com/ledgerwatch/erigon-lib/gointerfaces"
-	"github.com/ledgerwatch/erigon-lib/gointerfaces/sentry"
-	"github.com/ledgerwatch/erigon-lib/types"
+	"github.com/gateway-fm/cdk-erigon-lib/gointerfaces"
+	"github.com/gateway-fm/cdk-erigon-lib/gointerfaces/sentry"
+	"github.com/gateway-fm/cdk-erigon-lib/types"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 

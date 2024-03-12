@@ -28,14 +28,14 @@ import (
 	"time"
 
 	"github.com/google/btree"
-	"github.com/ledgerwatch/erigon-lib/common/background"
+	"github.com/gateway-fm/cdk-erigon-lib/common/background"
 	"github.com/ledgerwatch/log/v3"
 	"golang.org/x/crypto/sha3"
 
-	"github.com/ledgerwatch/erigon-lib/commitment"
-	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/common/length"
-	"github.com/ledgerwatch/erigon-lib/compress"
+	"github.com/gateway-fm/cdk-erigon-lib/commitment"
+	"github.com/gateway-fm/cdk-erigon-lib/common"
+	"github.com/gateway-fm/cdk-erigon-lib/common/length"
+	"github.com/gateway-fm/cdk-erigon-lib/compress"
 )
 
 // Defines how to evaluate commitments

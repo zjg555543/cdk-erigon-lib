@@ -25,7 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ledgerwatch/erigon-lib/common/hexutility"
+	"github.com/gateway-fm/cdk-erigon-lib/common/hexutility"
 )
 
 func TestParseTransactionRLP(t *testing.T) {

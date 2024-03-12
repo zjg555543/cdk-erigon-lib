@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	btree2 "github.com/tidwall/btree"
 
-	"github.com/ledgerwatch/erigon-lib/recsplit/eliasfano32"
+	"github.com/gateway-fm/cdk-erigon-lib/recsplit/eliasfano32"
 )
 
 func TestFindMergeRangeCornerCases(t *testing.T) {

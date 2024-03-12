@@ -25,14 +25,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ledgerwatch/erigon-lib/common/background"
+	"github.com/gateway-fm/cdk-erigon-lib/common/background"
 	"github.com/ledgerwatch/log/v3"
 
-	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/common/cmp"
-	"github.com/ledgerwatch/erigon-lib/compress"
-	"github.com/ledgerwatch/erigon-lib/recsplit"
-	"github.com/ledgerwatch/erigon-lib/recsplit/eliasfano32"
+	"github.com/gateway-fm/cdk-erigon-lib/common"
+	"github.com/gateway-fm/cdk-erigon-lib/common/cmp"
+	"github.com/gateway-fm/cdk-erigon-lib/compress"
+	"github.com/gateway-fm/cdk-erigon-lib/recsplit"
+	"github.com/gateway-fm/cdk-erigon-lib/recsplit/eliasfano32"
 )
 
 func (d *Domain) endTxNumMinimax() uint64 {
