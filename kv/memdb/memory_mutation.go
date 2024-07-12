@@ -16,13 +16,13 @@ package memdb
 import (
 	"bytes"
 	"context"
-
 	"github.com/gateway-fm/cdk-erigon-lib/kv/iter"
 	"github.com/gateway-fm/cdk-erigon-lib/kv/order"
 	"github.com/ledgerwatch/log/v3"
 
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 	"github.com/gateway-fm/cdk-erigon-lib/kv/mdbx"
+	"sync"
 )
 
 type MemoryMutation struct {
@@ -32,6 +32,10 @@ type MemoryMutation struct {
 	clearedTables    map[string]struct{}
 	db               kv.Tx
 	statelessCursors map[string]kv.RwCursor
+
+	snapshots      map[uint64]*MemoryMutation
+	tmpDir         string
+	snapshotsMutex sync.Mutex
 }
 
 // NewMemoryBatch - starts in-mem batch
@@ -58,6 +62,9 @@ func NewMemoryBatch(tx kv.Tx, tmpDir string) *MemoryMutation {
 		memTx:          memTx,
 		deletedEntries: make(map[string]map[string]struct{}),
 		clearedTables:  make(map[string]struct{}),
+		snapshots:      make(map[uint64]*MemoryMutation),
+		tmpDir:         tmpDir,
+		snapshotsMutex: sync.Mutex{},
 	}
 }
 
