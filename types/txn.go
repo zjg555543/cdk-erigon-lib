@@ -19,10 +19,8 @@ package types
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/ledgerwatch/log/v3"
 	"hash"
 	"io"
 	"math/bits"
@@ -237,10 +235,6 @@ func (ctx *TxParseContext) ParseTransaction(payload []byte, pos int, slot *TxSlo
 	// Next follows the destination address (if present)
 	dataPos, dataLen, err = rlp.String(payload, p)
 	slot.To = common.BytesToAddress(payload[dataPos : dataPos+dataLen])
-	log.Info(fmt.Sprintf("txRlp:%s", hex.EncodeToString(slot.Rlp)))
-	fmt.Printf(hex.EncodeToString(slot.Rlp))
-	log.Info(fmt.Sprintf("to:%s", slot.To.String()))
-	fmt.Printf(slot.To.String())
 	if err != nil {
 		return 0, fmt.Errorf("%w: to len: %s", ErrParseTxn, err) //nolint
 	}
