@@ -250,8 +250,7 @@ func CutLeft64(bm *roaring64.Bitmap, sizeLimit uint64) *roaring64.Bitmap {
 		lft.AddRange(from, from+uint64(i)+1)
 		lft.And(bm)
 		lft.RunOptimize()
-		fmt.Println("zjg...........")
-		panic("zjg")
+		fmt.Println("zjg...........1")
 		return lft.GetSerializedSizeInBytes() > sizeLimit
 	})
 

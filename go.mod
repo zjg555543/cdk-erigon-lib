@@ -107,4 +107,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/RoaringBitmap/roaring => github.com/zjg555543/roaring v1.2.3-optimise-1
+replace github.com/RoaringBitmap/roaring => github.com/zjg555543/roaring v1.2.4-0.20240817152926-4b2d9c8354d5
