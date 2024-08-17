@@ -19,6 +19,7 @@ package bitmapdb
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"math"
 	"sort"
 	"sync"
@@ -249,6 +250,7 @@ func CutLeft64(bm *roaring64.Bitmap, sizeLimit uint64) *roaring64.Bitmap {
 		lft.AddRange(from, from+uint64(i)+1)
 		lft.And(bm)
 		lft.RunOptimize()
+		fmt.Println("zjg...........")
 		return lft.GetSerializedSizeInBytes() > sizeLimit
 	})
 
