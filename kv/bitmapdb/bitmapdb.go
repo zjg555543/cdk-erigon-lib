@@ -245,14 +245,18 @@ func CutLeft64(bm *roaring64.Bitmap, sizeLimit uint64) *roaring64.Bitmap {
 
 	from := bm.Minimum()
 	minMax := bm.Maximum() - bm.Minimum()
+	count := 0
+
 	to := sort.Search(int(minMax), func(i int) bool { // can be optimized to avoid "too small steps", but let's leave it for readability
 		lft := roaring64.New() // bitmap.Clear() method intentionally not used here, because then serialized size of bitmap getting bigger
 		lft.AddRange(from, from+uint64(i)+1)
 		lft.And(bm)
 		lft.RunOptimize()
-		fmt.Println("zjg...........1")
+		count += 1
 		return lft.GetSerializedSizeInBytes() > sizeLimit
 	})
+
+	fmt.Println(fmt.Sprintf("zjg, count: %d", count))
 
 	lft := roaring64.New()
 	lft.AddRange(from, from+uint64(to)) // no +1 because sort.Search returns element which is just higher threshold - but we need lower
