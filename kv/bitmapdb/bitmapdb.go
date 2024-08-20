@@ -87,7 +87,7 @@ const ChunkLimit = uint64(1950 * datasize.B) // threshold beyond which MDBX over
 // removing lft part from `bm`
 // returns nil on zero cardinality
 func CutLeft(bm *roaring.Bitmap, sizeLimit uint64) *roaring.Bitmap {
-	once.Do(initialize)
+	panic("CutLeft")
 	if myType == 0 {
 		return CutLeftRaw(bm, sizeLimit)
 	} else if myType == 1 {
