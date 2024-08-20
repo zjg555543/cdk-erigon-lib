@@ -19,6 +19,7 @@ package bitmapdb
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"math"
 	"sort"
 	"sync"
@@ -29,6 +30,14 @@ import (
 	libcommon "github.com/gateway-fm/cdk-erigon-lib/common"
 	"github.com/gateway-fm/cdk-erigon-lib/kv"
 )
+
+var once sync.Once
+
+var myType = 0
+
+func initialize() {
+	fmt.Println(fmt.Sprintf("zjg, myType:%v", myType))
+}
 
 const MaxUint32 = 1<<32 - 1
 
@@ -78,7 +87,7 @@ const ChunkLimit = uint64(1950 * datasize.B) // threshold beyond which MDBX over
 // removing lft part from `bm`
 // returns nil on zero cardinality
 func CutLeft(bm *roaring.Bitmap, sizeLimit uint64) *roaring.Bitmap {
-	myType := 0
+	once.Do(initialize)
 	if myType == 0 {
 		return CutLeftRaw(bm, sizeLimit)
 	} else if myType == 1 {
@@ -313,7 +322,7 @@ func SeekInBitmap(m *roaring.Bitmap, n uint32) (found uint32, ok bool) {
 }
 
 func CutLeft64(bm *roaring64.Bitmap, sizeLimit uint64) *roaring64.Bitmap {
-	myType := 0
+	once.Do(initialize)
 	if myType == 0 {
 		return CutLeft64Raw(bm, sizeLimit)
 	} else if myType == 1 {
