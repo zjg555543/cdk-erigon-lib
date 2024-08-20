@@ -78,7 +78,22 @@ const ChunkLimit = uint64(1950 * datasize.B) // threshold beyond which MDBX over
 // CutLeft - cut from bitmap `targetSize` bytes from left
 // removing lft part from `bm`
 // returns nil on zero cardinality
-func CutLeft(bm *roaring.Bitmap, sizeLimit uint64) *roaring.Bitmap {
+func CutLeft(bm *roaring.Bitmap, sizeLimit uint64, myType int) *roaring.Bitmap {
+	if myType == 0 {
+		return CutLeftRaw(bm, sizeLimit)
+	} else if myType == 1 {
+		return CutLeftGPT(bm, sizeLimit)
+	} else if myType == 2 {
+		return CutLeftDoubao(bm, sizeLimit)
+	}
+
+	return nil
+}
+
+// CutLeft - cut from bitmap `targetSize` bytes from left
+// removing lft part from `bm`
+// returns nil on zero cardinality
+func CutLeftRaw(bm *roaring.Bitmap, sizeLimit uint64) *roaring.Bitmap {
 	if bm.GetCardinality() == 0 {
 		return nil
 	}
@@ -111,17 +126,89 @@ func CutLeft(bm *roaring.Bitmap, sizeLimit uint64) *roaring.Bitmap {
 	return lft
 }
 
-func WalkChunks(bm *roaring.Bitmap, sizeLimit uint64, f func(chunk *roaring.Bitmap, isLast bool) error) error {
+// CutLeft - cut from bitmap `targetSize` bytes from left
+// removing lft part from `bm`
+// returns nil on zero cardinality
+func CutLeftGPT(bm *roaring.Bitmap, sizeLimit uint64) *roaring.Bitmap {
+	if bm.GetCardinality() == 0 {
+		return nil
+	}
+
+	sz := bm.GetSerializedSizeInBytes()
+	if sz <= sizeLimit {
+		lft := roaring.New()
+		lft.AddRange(uint64(bm.Minimum()), uint64(bm.Maximum())+1)
+		lft.And(bm)
+		lft.RunOptimize()
+		bm.Clear()
+		return lft
+	}
+
+	from := uint64(bm.Minimum())
+	minMax := bm.Maximum() - bm.Minimum()
+	to := sort.Search(int(minMax), func(i int) bool { // can be optimized to avoid "too small steps", but let's leave it for readability
+		lft := roaring.New() // bitmap.Clear() method intentionally not used here, because then serialized size of bitmap getting bigger
+		lft.AddRange(from, from+uint64(i)+1)
+		lft.And(bm)
+		lft.RunOptimize()
+		return lft.GetSerializedSizeInBytes() > sizeLimit
+	})
+
+	lft := roaring.New()
+	lft.AddRange(from, from+uint64(to)) // no +1 because sort.Search returns element which is just higher threshold - but we need lower
+	lft.And(bm)
+	bm.RemoveRange(from, from+uint64(to))
+	lft.RunOptimize()
+	return lft
+}
+
+// CutLeft - cut from bitmap `targetSize` bytes from left
+// removing lft part from `bm`
+// returns nil on zero cardinality
+func CutLeftDoubao(bm *roaring.Bitmap, sizeLimit uint64) *roaring.Bitmap {
+	if bm.GetCardinality() == 0 {
+		return nil
+	}
+
+	sz := bm.GetSerializedSizeInBytes()
+	if sz <= sizeLimit {
+		lft := roaring.New()
+		lft.AddRange(uint64(bm.Minimum()), uint64(bm.Maximum())+1)
+		lft.And(bm)
+		lft.RunOptimize()
+		bm.Clear()
+		return lft
+	}
+
+	from := uint64(bm.Minimum())
+	minMax := bm.Maximum() - bm.Minimum()
+	to := sort.Search(int(minMax), func(i int) bool { // can be optimized to avoid "too small steps", but let's leave it for readability
+		lft := roaring.New() // bitmap.Clear() method intentionally not used here, because then serialized size of bitmap getting bigger
+		lft.AddRange(from, from+uint64(i)+1)
+		lft.And(bm)
+		lft.RunOptimize()
+		return lft.GetSerializedSizeInBytes() > sizeLimit
+	})
+
+	lft := roaring.New()
+	lft.AddRange(from, from+uint64(to)) // no +1 because sort.Search returns element which is just higher threshold - but we need lower
+	lft.And(bm)
+	bm.RemoveRange(from, from+uint64(to))
+	lft.RunOptimize()
+	return lft
+}
+
+func WalkChunks(bm *roaring.Bitmap, sizeLimit uint64, myType int, f func(chunk *roaring.Bitmap, isLast bool) error) error {
 	for bm.GetCardinality() > 0 {
-		if err := f(CutLeft(bm, sizeLimit), bm.GetCardinality() == 0); err != nil {
+		if err := f(CutLeft(bm, sizeLimit, myType), bm.GetCardinality() == 0); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func WalkChunkWithKeys(k []byte, m *roaring.Bitmap, sizeLimit uint64, f func(chunkKey []byte, chunk *roaring.Bitmap) error) error {
-	return WalkChunks(m, sizeLimit, func(chunk *roaring.Bitmap, isLast bool) error {
+func WalkChunkWithKeys(k []byte, m *roaring.Bitmap, sizeLimit uint64, myType int, f func(chunkKey []byte, chunk *roaring.Bitmap) error) error {
+	return WalkChunks(m, sizeLimit, myType, func(chunk *roaring.Bitmap, isLast bool) error {
 		chunkKey := make([]byte, len(k)+4)
 		copy(chunkKey, k)
 		if isLast {
@@ -136,7 +223,7 @@ func WalkChunkWithKeys(k []byte, m *roaring.Bitmap, sizeLimit uint64, f func(chu
 // TruncateRange - gets existing bitmap in db and call RemoveRange operator on it.
 // starts from hot shard, stops when shard not overlap with [from-to)
 // !Important: [from, to)
-func TruncateRange(db kv.RwTx, bucket string, key []byte, to uint32) error {
+func TruncateRange(db kv.RwTx, bucket string, key []byte, to uint32, myType int) error {
 	chunkKey := make([]byte, len(key)+4)
 	copy(chunkKey, key)
 	binary.BigEndian.PutUint32(chunkKey[len(chunkKey)-4:], to)
@@ -167,7 +254,7 @@ func TruncateRange(db kv.RwTx, bucket string, key []byte, to uint32) error {
 	}
 
 	buf := bytes.NewBuffer(nil)
-	return WalkChunkWithKeys(key, bm, ChunkLimit, func(chunkKey []byte, chunk *roaring.Bitmap) error {
+	return WalkChunkWithKeys(key, bm, ChunkLimit, myType, func(chunkKey []byte, chunk *roaring.Bitmap) error {
 		buf.Reset()
 		if _, err := chunk.WriteTo(buf); err != nil {
 			return err
