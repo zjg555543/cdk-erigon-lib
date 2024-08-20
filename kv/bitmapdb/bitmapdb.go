@@ -155,7 +155,7 @@ func CutLeftGPT(bm *roaring.Bitmap, sizeLimit uint64) *roaring.Bitmap {
 
 	// 创建一个用于临时计算的 bitmap 实例
 	tempBitmap := roaring.New()
-	defer tempBitmap.Release() // 确保释放资源
+	defer tempBitmap.Clear() // 确保释放资源
 
 	// 使用 sort.Search 查找合适的范围
 	to := sort.Search(int(minMax), func(i int) bool {
