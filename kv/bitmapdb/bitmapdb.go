@@ -19,7 +19,6 @@ package bitmapdb
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"math"
 	"sort"
 	"sync"
@@ -312,10 +311,19 @@ func SeekInBitmap(m *roaring.Bitmap, n uint32) (found uint32, ok bool) {
 	return found, ok
 }
 
-// CutLeft - cut from bitmap `targetSize` bytes from left
-// removing lft part from `bm`
-// returns nil on zero cardinality
-func CutLeft64(bm *roaring64.Bitmap, sizeLimit uint64) *roaring64.Bitmap {
+func CutLeft64(bm *roaring64.Bitmap, sizeLimit uint64, myType int) *roaring64.Bitmap {
+	if myType == 0 {
+		return CutLeft64Raw(bm, sizeLimit)
+	} else if myType == 1 {
+		return CutLeft64GPT(bm, sizeLimit)
+	} else if myType == 2 {
+		return CutLeft64Doubao(bm, sizeLimit)
+	}
+
+	return nil
+}
+
+func CutLeft64Raw(bm *roaring64.Bitmap, sizeLimit uint64) *roaring64.Bitmap {
 	if bm.GetCardinality() == 0 {
 		return nil
 	}
@@ -343,8 +351,6 @@ func CutLeft64(bm *roaring64.Bitmap, sizeLimit uint64) *roaring64.Bitmap {
 		return lft.GetSerializedSizeInBytes() > sizeLimit
 	})
 
-	fmt.Println(fmt.Sprintf("zjg, count: %d", count))
-
 	lft := roaring64.New()
 	lft.AddRange(from, from+uint64(to)) // no +1 because sort.Search returns element which is just higher threshold - but we need lower
 	lft.And(bm)
@@ -353,17 +359,100 @@ func CutLeft64(bm *roaring64.Bitmap, sizeLimit uint64) *roaring64.Bitmap {
 	return lft
 }
 
-func WalkChunks64(bm *roaring64.Bitmap, sizeLimit uint64, f func(chunk *roaring64.Bitmap, isLast bool) error) error {
+func CutLeft64GPT(bm *roaring64.Bitmap, sizeLimit uint64) *roaring64.Bitmap {
+	if bm.GetCardinality() == 0 {
+		return nil
+	}
+
+	sz := bm.GetSerializedSizeInBytes()
+	if sz <= sizeLimit {
+		// 处理 map size 小于等于 sizeLimit 的情况
+		lft := roaring64.New()
+		lft.AddRange(bm.Minimum(), bm.Maximum()+1)
+		lft.And(bm)
+		lft.RunOptimize()
+		bm.Clear()
+		return lft
+	}
+
+	// 初始化变量
+	from := bm.Minimum()
+	minMax := bm.Maximum() - bm.Minimum()
+
+	// 创建一个用于测试大小的临时 Bitmap
+	tempBitmap := roaring64.New()
+
+	// 使用 sort.Search 查找合适的范围
+	to := sort.Search(int(minMax), func(i int) bool {
+		tempBitmap.Clear() // 清除之前的内容
+		tempBitmap.AddRange(from, from+uint64(i)+1)
+		tempBitmap.And(bm)
+		tempBitmap.RunOptimize()
+		return tempBitmap.GetSerializedSizeInBytes() > sizeLimit
+	})
+
+	// 创建最终结果 Bitmap
+	lft := roaring64.New()
+	lft.AddRange(from, from+uint64(to)) // 不加 +1，因为 sort.Search 返回的是下界
+	lft.And(bm)
+	bm.RemoveRange(from, from+uint64(to))
+	lft.RunOptimize()
+
+	return lft
+}
+
+// 优化后的二分搜索函数
+func binarySearch64(from, minMax uint64, bm *roaring64.Bitmap, sizeLimit uint64) int {
+	low, high := 0, int(minMax)
+	for low < high {
+		mid := (low + high) / 2
+		temp := roaring64.New()
+		temp.AddRange(from, from+uint64(mid))
+		temp.And(bm)
+		temp.RunOptimize()
+		if temp.GetSerializedSizeInBytes() > sizeLimit {
+			high = mid
+		} else {
+			low = mid + 1
+		}
+	}
+	return low
+}
+
+func CutLeft64Doubao(bm *roaring64.Bitmap, sizeLimit uint64) *roaring64.Bitmap {
+	if bm.GetCardinality() == 0 {
+		return nil
+	}
+
+	sz := bm.GetSerializedSizeInBytes()
+	if sz <= sizeLimit {
+		result := bm.Clone()
+		result.RunOptimize()
+		return result
+	}
+
+	from := bm.Minimum()
+	minMax := bm.Maximum() - bm.Minimum()
+
+	to := binarySearch64(from, minMax, bm, sizeLimit)
+	result := roaring64.New()
+	result.AddRange(from, from+uint64(to))
+	result.And(bm)
+	result.RunOptimize()
+	return result
+}
+
+func WalkChunks64(bm *roaring64.Bitmap, sizeLimit uint64, myType int, f func(chunk *roaring64.Bitmap, isLast bool) error) error {
 	for bm.GetCardinality() > 0 {
-		if err := f(CutLeft64(bm, sizeLimit), bm.GetCardinality() == 0); err != nil {
+		if err := f(CutLeft64(bm, sizeLimit, myType), bm.GetCardinality() == 0); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func WalkChunkWithKeys64(k []byte, m *roaring64.Bitmap, sizeLimit uint64, f func(chunkKey []byte, chunk *roaring64.Bitmap) error) error {
-	return WalkChunks64(m, sizeLimit, func(chunk *roaring64.Bitmap, isLast bool) error {
+func WalkChunkWithKeys64(k []byte, m *roaring64.Bitmap, sizeLimit uint64, myType int, f func(chunkKey []byte, chunk *roaring64.Bitmap) error) error {
+	return WalkChunks64(m, sizeLimit, myType, func(chunk *roaring64.Bitmap, isLast bool) error {
 		chunkKey := make([]byte, len(k)+8)
 		copy(chunkKey, k)
 		if isLast {
@@ -414,7 +503,7 @@ func TruncateRange64(db kv.RwTx, bucket string, key []byte, to uint64) error {
 	}
 
 	buf := bytes.NewBuffer(nil)
-	return WalkChunkWithKeys64(key, bm, ChunkLimit, func(chunkKey []byte, chunk *roaring64.Bitmap) error {
+	return WalkChunkWithKeys64(key, bm, ChunkLimit, -1, func(chunkKey []byte, chunk *roaring64.Bitmap) error {
 		buf.Reset()
 		if _, err := chunk.WriteTo(buf); err != nil {
 			return err
