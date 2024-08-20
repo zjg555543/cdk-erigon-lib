@@ -77,7 +77,8 @@ const ChunkLimit = uint64(1950 * datasize.B) // threshold beyond which MDBX over
 // CutLeft - cut from bitmap `targetSize` bytes from left
 // removing lft part from `bm`
 // returns nil on zero cardinality
-func CutLeft(bm *roaring.Bitmap, sizeLimit uint64, myType int) *roaring.Bitmap {
+func CutLeft(bm *roaring.Bitmap, sizeLimit uint64) *roaring.Bitmap {
+	myType := 0
 	if myType == 0 {
 		return CutLeftRaw(bm, sizeLimit)
 	} else if myType == 1 {
@@ -197,17 +198,17 @@ func CutLeftDoubao(bm *roaring.Bitmap, sizeLimit uint64) *roaring.Bitmap {
 	return lft
 }
 
-func WalkChunks(bm *roaring.Bitmap, sizeLimit uint64, myType int, f func(chunk *roaring.Bitmap, isLast bool) error) error {
+func WalkChunks(bm *roaring.Bitmap, sizeLimit uint64, f func(chunk *roaring.Bitmap, isLast bool) error) error {
 	for bm.GetCardinality() > 0 {
-		if err := f(CutLeft(bm, sizeLimit, myType), bm.GetCardinality() == 0); err != nil {
+		if err := f(CutLeft(bm, sizeLimit), bm.GetCardinality() == 0); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func WalkChunkWithKeys(k []byte, m *roaring.Bitmap, sizeLimit uint64, myType int, f func(chunkKey []byte, chunk *roaring.Bitmap) error) error {
-	return WalkChunks(m, sizeLimit, myType, func(chunk *roaring.Bitmap, isLast bool) error {
+func WalkChunkWithKeys(k []byte, m *roaring.Bitmap, sizeLimit uint64, f func(chunkKey []byte, chunk *roaring.Bitmap) error) error {
+	return WalkChunks(m, sizeLimit, func(chunk *roaring.Bitmap, isLast bool) error {
 		chunkKey := make([]byte, len(k)+4)
 		copy(chunkKey, k)
 		if isLast {
@@ -222,7 +223,7 @@ func WalkChunkWithKeys(k []byte, m *roaring.Bitmap, sizeLimit uint64, myType int
 // TruncateRange - gets existing bitmap in db and call RemoveRange operator on it.
 // starts from hot shard, stops when shard not overlap with [from-to)
 // !Important: [from, to)
-func TruncateRange(db kv.RwTx, bucket string, key []byte, to uint32, myType int) error {
+func TruncateRange(db kv.RwTx, bucket string, key []byte, to uint32) error {
 	chunkKey := make([]byte, len(key)+4)
 	copy(chunkKey, key)
 	binary.BigEndian.PutUint32(chunkKey[len(chunkKey)-4:], to)
@@ -253,7 +254,7 @@ func TruncateRange(db kv.RwTx, bucket string, key []byte, to uint32, myType int)
 	}
 
 	buf := bytes.NewBuffer(nil)
-	return WalkChunkWithKeys(key, bm, ChunkLimit, myType, func(chunkKey []byte, chunk *roaring.Bitmap) error {
+	return WalkChunkWithKeys(key, bm, ChunkLimit, func(chunkKey []byte, chunk *roaring.Bitmap) error {
 		buf.Reset()
 		if _, err := chunk.WriteTo(buf); err != nil {
 			return err
@@ -311,7 +312,8 @@ func SeekInBitmap(m *roaring.Bitmap, n uint32) (found uint32, ok bool) {
 	return found, ok
 }
 
-func CutLeft64(bm *roaring64.Bitmap, sizeLimit uint64, myType int) *roaring64.Bitmap {
+func CutLeft64(bm *roaring64.Bitmap, sizeLimit uint64) *roaring64.Bitmap {
+	myType := 0
 	if myType == 0 {
 		return CutLeft64Raw(bm, sizeLimit)
 	} else if myType == 1 {
@@ -442,17 +444,17 @@ func CutLeft64Doubao(bm *roaring64.Bitmap, sizeLimit uint64) *roaring64.Bitmap {
 	return result
 }
 
-func WalkChunks64(bm *roaring64.Bitmap, sizeLimit uint64, myType int, f func(chunk *roaring64.Bitmap, isLast bool) error) error {
+func WalkChunks64(bm *roaring64.Bitmap, sizeLimit uint64, f func(chunk *roaring64.Bitmap, isLast bool) error) error {
 	for bm.GetCardinality() > 0 {
-		if err := f(CutLeft64(bm, sizeLimit, myType), bm.GetCardinality() == 0); err != nil {
+		if err := f(CutLeft64(bm, sizeLimit), bm.GetCardinality() == 0); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func WalkChunkWithKeys64(k []byte, m *roaring64.Bitmap, sizeLimit uint64, myType int, f func(chunkKey []byte, chunk *roaring64.Bitmap) error) error {
-	return WalkChunks64(m, sizeLimit, myType, func(chunk *roaring64.Bitmap, isLast bool) error {
+func WalkChunkWithKeys64(k []byte, m *roaring64.Bitmap, sizeLimit uint64, f func(chunkKey []byte, chunk *roaring64.Bitmap) error) error {
+	return WalkChunks64(m, sizeLimit, func(chunk *roaring64.Bitmap, isLast bool) error {
 		chunkKey := make([]byte, len(k)+8)
 		copy(chunkKey, k)
 		if isLast {
@@ -503,7 +505,7 @@ func TruncateRange64(db kv.RwTx, bucket string, key []byte, to uint64) error {
 	}
 
 	buf := bytes.NewBuffer(nil)
-	return WalkChunkWithKeys64(key, bm, ChunkLimit, -1, func(chunkKey []byte, chunk *roaring64.Bitmap) error {
+	return WalkChunkWithKeys64(key, bm, ChunkLimit, func(chunkKey []byte, chunk *roaring64.Bitmap) error {
 		buf.Reset()
 		if _, err := chunk.WriteTo(buf); err != nil {
 			return err
